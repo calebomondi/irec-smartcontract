@@ -1,0 +1,17 @@
+{
+  "name": "irec-smartcontract",
+  "version": "1.0.0",
+  "description": "IREC Smart Contract for managing renewable energy certificates",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "Kaleb Mokua",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.19"
+  }
+}
