@@ -1,0 +1,137 @@
+// scripts/deploy.ts
+import { ethers } from "hardhat";
+
+async function main() {
+  console.log("Starting deployment process...");
+  
+  // Get the signers
+  const [deployer] = await ethers.getSigners();
+  console.log(`Deploying contracts with the account: ${deployer.address}`);
+  
+  // Display account balance
+  const balance = await deployer.provider.getBalance(deployer.address);
+  console.log(`Account balance: ${ethers.formatEther(balance)} ETH`);
+
+  // 1. Deploy the NFT contract first
+  console.log("\n1. Deploying IRECCertNFT contract...");
+  const IRECCertNFT = await ethers.getContractFactory("IRECCertNFT");
+  const nftContract = await IRECCertNFT.deploy(
+    "IREC Certificate",                     //name
+    "IREC",                                 //symbol       
+    "https://www.jsonkeeper.com/b/YDXG/"    // base URI for metadata
+  );
+  await nftContract.deploymentTransaction()?.wait();
+  
+  const nftAddress = await nftContract.getAddress();
+  console.log(`IRECCertNFT deployed to: ${nftAddress}`);
+  
+  // Mint an NFT to the deployer
+  console.log("Minting the first NFT certificate...");
+  const mintTx = await nftContract.safeMint(deployer.address);
+  await mintTx.wait();
+  console.log("NFT minted successfully!");
+  
+  // Get the token ID of the minted NFT (it should be 0 for the first NFT)
+  const tokenId = 0;
+  console.log(`Minted NFT with token ID: ${tokenId}`);
+  
+  // 2. Deploy the Token contract that links to the NFT
+  console.log("\n2. Deploying IRECCertTokens contract...");
+  const IRECCertTokens = await ethers.getContractFactory("IRECCertTokens");
+  const totalSupply = ethers.parseEther("1000"); // 1000 tokens with 18 decimals
+  
+  const tokenContract = await IRECCertTokens.deploy(
+    totalSupply,         // total supply
+    "IREC Tokens",       // name
+    "IRET",              // symbol
+    nftAddress,          // NFT contract address
+    tokenId              // NFT token ID
+  );
+  await tokenContract.deploymentTransaction()?.wait();
+  
+  const tokenAddress = await tokenContract.getAddress();
+  console.log(`IRECCertTokens deployed to: ${tokenAddress}`);
+  
+  // 3. Deploy the Marketplace contract that uses the tokens
+  console.log("\n3. Deploying IRECMarketplace contract...");
+  const IRECMarketplace = await ethers.getContractFactory("IRECMarketplace");
+  const marketplace = await IRECMarketplace.deploy(tokenAddress);
+  await marketplace.deploymentTransaction()?.wait();
+  
+  const marketplaceAddress = await marketplace.getAddress();
+  console.log(`IRECMarketplace deployed to: ${marketplaceAddress}`);
+  
+  // 4. Setup the marketplace
+  console.log("\n4. Setting up the marketplace...");
+  
+  // Set sale price per token (in wei)
+  const pricePerToken = ethers.parseEther("0.01");
+  console.log(`Configuring sale price: ${ethers.formatEther(pricePerToken)} ETH per token`);
+  
+  const configureTx = await marketplace.configureSale(pricePerToken);
+  await configureTx.wait();
+  console.log("Sale price configured successfully!");
+
+  
+  // Log deployment summary
+  console.log("\n===============================");
+  console.log("DEPLOYMENT SUMMARY");
+  console.log("===============================");
+  console.log(`IRECCertNFT: ${nftAddress}`);
+  console.log(`IRECCertTokens: ${tokenAddress}`);
+  console.log(`IRECMarketplace: ${marketplaceAddress}`);
+  console.log("===============================");
+  
+  // Verify contracts on Etherscan
+  const network = await ethers.provider.getNetwork();
+  if (network.name !== "localhost" && network.name !== "hardhat") {
+    console.log("\nVerifying contracts on Etherscan...");
+    console.log("Waiting for block confirmations...");
+    
+    // Wait for block confirmation
+    await new Promise(resolve => setTimeout(resolve, 30000));  // 30 seconds
+    
+    // Import hre for verification
+    const hre = require("hardhat");
+    
+    // Verify NFT contract
+    await hre.run("verify:verify", {
+      address: nftAddress,
+      constructorArguments: [
+        "IREC Certificate",
+        "IREC",
+        "https://www.jsonkeeper.com/b/YDXG/"
+      ],
+    });
+    
+    // Verify Token contract
+    await hre.run("verify:verify", {
+      address: tokenAddress,
+      constructorArguments: [
+        totalSupply,
+        "IREC Tokens",
+        "IRET",
+        nftAddress,
+        tokenId
+      ],
+    });
+    
+    // Verify Marketplace contract
+    await hre.run("verify:verify", {
+      address: marketplaceAddress,
+      constructorArguments: [tokenAddress],
+    });
+    
+    console.log("Contract verification complete!");
+  }
+  
+  console.log("\nDeployment complete!");
+}
+
+// Execute the deployment
+main()
+  .then(() => process.exit(0))
+  .catch((error: any) => {
+    console.error(error);
+    process.exit(1);
+  });
