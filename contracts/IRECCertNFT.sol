@@ -21,11 +21,13 @@ contract IRECCertNFT is ERC721, ERC721URIStorage, Ownable {
     }
 
     //Mint tokens
-    function safeMint(address to) public onlyOwner {
+    function safeMint(address to) public onlyOwner returns (uint256) {
         uint256 tokenId = getTokenIdCount();
         increment();
         _safeMint(to, tokenId);
         _setTokenURI(tokenId, _baseTokenURI);
+
+        return tokenId;
     }
 
     //Icreament tokenId count

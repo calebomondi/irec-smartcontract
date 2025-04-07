@@ -25,8 +25,6 @@ async function main() {
   const nftAddress = await nftContract.getAddress();
   console.log(`IRECCertNFT deployed to: ${nftAddress}`);
   
-  // Get the token ID of the minted NFT (it is 0 for the first NFT)
-  const tokenId = 0;
   
   // 2. Deploy the Token contract that links to the NFT
   console.log("\n2. Deploying IRECCertTokens contract...");
@@ -35,10 +33,9 @@ async function main() {
   
   const tokenContract = await IRECCertTokens.deploy(
     totalSupply,         // total supply
-    "IREC Tokens",       // name
+    "I-REC Tokens",       // name
     "IRET",              // symbol
-    "0x8539DA660BFEd7c0F49728CDA6726BeB1ecf2cBA",          // NFT contract address
-    tokenId              // NFT token ID
+    "0x4B1D1EfeBC5E3CE231127577ed1Ef8E3b0159a1b"         // NFT contract address
   );
   await tokenContract.deploymentTransaction()?.wait();
   
@@ -48,12 +45,12 @@ async function main() {
   // 3. Deploy the Marketplace contract that uses the tokens
   console.log("\n3. Deploying IRECMarketplace contract...");
   const IRECMarketplace = await ethers.getContractFactory("IRECMarketplace");
-  const marketplace = await IRECMarketplace.deploy("0x953894c851453758b3Ec420f75e96217241DC038");
+  const marketplace = await IRECMarketplace.deploy("0x5597AC00198306fC45A4f5c63DBBc91233B81157");
   await marketplace.deploymentTransaction()?.wait();
   
   const marketplaceAddress = await marketplace.getAddress();
   console.log(`IRECMarketplace deployed to: ${marketplaceAddress}`);
-
+  
   /*
   // Verify contracts on Etherscan
   const network = await ethers.provider.getNetwork();

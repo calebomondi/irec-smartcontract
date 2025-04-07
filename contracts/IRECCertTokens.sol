@@ -10,32 +10,41 @@ import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 contract IRECCertTokens is ERC20, Ownable, ERC20Permit, ERC721Holder {
     // The NFT contract
     IERC721 public nftContract;
-    
-    // The specific NFT token ID that is fractionalized
-    uint256 public nftTokenId;
+
+    //total supply
+    uint256 public iTotalSupply;
+
+    //check if token minted
+    mapping (uint256 => bool) public hasMinted;
+
+    event TokenMintedFromNFT(uint256 indexed nftTokenId);
 
     constructor(
         uint256 _totalSupply,
         string memory _name,
         string memory _symbol,
-        address _nftContractAddress,
-        uint256 _nftTokenId
-    ) ERC20(_name, _symbol) Ownable(msg.sender) ERC20Permit(_name) {
+        address _nftContractAddress
+    ) ERC20(_name, _symbol) Ownable(msg.sender) ERC20Permit('I-REC Tokens') {
         //get NFT 
         nftContract = IERC721(_nftContractAddress);
-        nftTokenId = _nftTokenId;
-
-        //mint
-        _mint(msg.sender, _totalSupply);
+        //initialize totalsupply
+        iTotalSupply = _totalSupply;
     }
     
    /**
     * @dev Mints tokens from the NFT holder
     */
-   function mintTokensFromNFT() public onlyOwner {
-        require(totalSupply() > 0, "Amount Must Be Greater Than 0!");
+   function tranferNFTOwnership(uint _nftTokenId) public onlyOwner {
+        require(iTotalSupply > 0, "Amount Must Be Greater Than 0!");
+        require(!hasMinted[_nftTokenId], "NFT Token ID Already Minted!");
+
         //mint fractions from NFT using tokenId and amount to be minted
-        nftContract.safeTransferFrom(msg.sender, address(this), nftTokenId);
+        nftContract.safeTransferFrom(msg.sender, address(this), _nftTokenId);
+        
+        //mint
+        _mint(msg.sender, iTotalSupply);
+
+        hasMinted[_nftTokenId] = true;
     }
 
 }

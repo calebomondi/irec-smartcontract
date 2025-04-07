@@ -1,298 +1,282 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
+import { Contract, Signer } from "ethers";
 
-describe("IREC Contract Tests", function () {
-  // Test fixture to deploy contracts once and reuse for multiple tests
-  async function deployContractsFixture() {
-    const [owner, buyer1, buyer2, seller1] = await ethers.getSigners();
-    
-    // Deploy NFT contract first
-    const IRECCertNFT = await ethers.getContractFactory("IRECCertNFT");
-    const baseTokenURI = "ipfs://QmXyz..."; // Replace with actual IPFS URI
-    const nftContract = await IRECCertNFT.deploy("IREC Certificate", "IREC", baseTokenURI);
-    await nftContract.waitForDeployment();
-    
-    // Mint an NFT to the owner
-    const mintTx = await nftContract.safeMint(owner.address);
-    await mintTx.wait();
-    const tokenId = 0; // First token ID should be 0
-    
-    // Deploy Token contract
-    const IRECCertTokens = await ethers.getContractFactory("IRECCertTokens");
-    const totalSupply = ethers.parseEther("1000"); // 1000 tokens
-    const tokenContract = await IRECCertTokens.deploy(
-      totalSupply,
-      "IREC Tokens",
-      "IRET",
-      await nftContract.getAddress(),
-      tokenId
-    );
-    await tokenContract.waitForDeployment();
-    
-    // Deploy Marketplace contract
-    const IRECMarketplace = await ethers.getContractFactory("IRECMarketplace");
-    const marketplace = await IRECMarketplace.deploy(await tokenContract.getAddress());
-    await marketplace.waitForDeployment();
-    
-    // Set sale price in marketplace
-    const pricePerToken = ethers.parseEther("0.01"); // 0.01 ETH per token
-    await marketplace.configureSale(pricePerToken);
-    
-    return { 
-      nftContract, 
-      tokenContract, 
-      marketplace, 
-      owner, 
-      buyer1, 
-      buyer2, 
-      seller1, 
-      tokenId,
-      pricePerToken,
-      totalSupply
-    };
-  }
+describe("IREC Ecosystem Tests", function () {
+  // Variables 
+  let nft: Contract;
+  let token: Contract;
+  let marketplace: Contract;
+  let owner: Signer;
+  let addr1: Signer;
+  let addr2: Signer;
+  let ownerAddress: string;
+  let addr1Address: string;
+  let addr2Address: string;
+  
+  const NFT_NAME = "IREC Certificate";
+  const NFT_SYMBOL = "IREC";
+  const BASE_URI = "https://example.com/metadata/";
+  const TOKEN_NAME = "IREC Fraction Token";
+  const TOKEN_SYMBOL = "IRECF";
+  const TOTAL_SUPPLY = ethers.parseEther("1000");
+  const PRICE_PER_TOKEN = ethers.parseEther("0.01");
 
-  /*
-   * IRECCertNFT Contract Tests
-   */
-  describe("IRECCertNFT", function () {
-    it("Should deploy and mint NFT correctly", async function () {
-      const { nftContract, owner, tokenId } = await loadFixture(deployContractsFixture);
-      
-      // Check NFT ownership
-      expect(await nftContract.ownerOf(tokenId)).to.equal(owner.address);
-      
-      // Check token count
-      expect(await nftContract.getTokenIdCount()).to.equal(1);
-    });
+  beforeEach(async function () {
+    // Get signers
+    [owner, addr1, addr2] = await ethers.getSigners();
+    ownerAddress = await owner.getAddress();
+    addr1Address = await addr1.getAddress();
+    addr2Address = await addr2.getAddress();
+
+    // Deploy NFT contract
+    const NFTFactory = await ethers.getContractFactory("IRECCertNFT");
+    nft = await NFTFactory.deploy(NFT_NAME, NFT_SYMBOL, BASE_URI);
     
-    it("Should set token URI correctly", async function () {
-      const { nftContract, tokenId } = await loadFixture(deployContractsFixture);
-      
-      const tokenURI = await nftContract.tokenURI(tokenId);
-      expect(tokenURI).to.not.be.empty;
-    });
+    // Deploy token contract
+    const TokenFactory = await ethers.getContractFactory("IRECCertTokens");
+    token = await TokenFactory.deploy(TOTAL_SUPPLY, TOKEN_NAME, TOKEN_SYMBOL, await nft.getAddress());
     
-    it("Should allow owner to set new base URI", async function () {
-      const { nftContract, owner } = await loadFixture(deployContractsFixture);
-      
-      const newBaseURI = "ipfs://QmNew...";
-      await nftContract.connect(owner).setBaseURI(newBaseURI);
-      
-      // We can't directly check the private _baseTokenURI, but we can mint a new token
-      // and check its URI which should use the new base URI
-      await nftContract.connect(owner).safeMint(owner.address);
-      const newTokenId = 1;
-      const tokenURI = await nftContract.tokenURI(newTokenId);
-      expect(tokenURI).to.include(newBaseURI);
-    });
-    
-    it("Should not allow non-owner to mint", async function () {
-      const { nftContract, buyer1 } = await loadFixture(deployContractsFixture);
-      
-      await expect(
-        nftContract.connect(buyer1).safeMint(buyer1.address)
-      ).to.be.revertedWithCustomError(nftContract, "OwnableUnauthorizedAccount");
-    });
+    // Deploy marketplace contract
+    const MarketplaceFactory = await ethers.getContractFactory("IRECMarketplace");
+    marketplace = await MarketplaceFactory.deploy(await token.getAddress());
   });
 
-  /*
-   * IRECCertTokens Contract Tests
-   */
-  describe("IRECCertTokens", function () {
-    it("Should deploy with correct initial supply", async function () {
-      const { tokenContract, owner, totalSupply } = await loadFixture(deployContractsFixture);
-      
-      const balance = await tokenContract.balanceOf(owner.address);
-      expect(balance).to.equal(totalSupply);
+  describe("IRECCertNFT Contract", function () {
+    it("Should deploy with correct name and symbol", async function () {
+      expect(await nft.name()).to.equal(NFT_NAME);
+      expect(await nft.symbol()).to.equal(NFT_SYMBOL);
     });
-    
-    it("Should correctly set NFT contract address and token ID", async function () {
-      const { tokenContract, nftContract, tokenId } = await loadFixture(deployContractsFixture);
-      
-      expect(await tokenContract.nftContract()).to.equal(await nftContract.getAddress());
-      expect(await tokenContract.nftTokenId()).to.equal(tokenId);
-    });
-    
-    it("Should allow owner to call mintTokensFromNFT", async function () {
-      const { tokenContract, nftContract, owner, tokenId } = await loadFixture(deployContractsFixture);
-      
-      // First, we need to approve the token contract to transfer the NFT
-      await nftContract.connect(owner).approve(await tokenContract.getAddress(), tokenId);
-      
-      // Now call mintTokensFromNFT
-      await tokenContract.connect(owner).mintTokensFromNFT();
-      
-      // Check NFT ownership has been transferred to the token contract
-      expect(await nftContract.ownerOf(tokenId)).to.equal(await tokenContract.getAddress());
-    });
-    
-    it("Should not allow non-owner to call mintTokensFromNFT", async function () {
-      const { tokenContract, buyer1 } = await loadFixture(deployContractsFixture);
-      
-      await expect(
-        tokenContract.connect(buyer1).mintTokensFromNFT()
-      ).to.be.revertedWithCustomError(tokenContract, "OwnableUnauthorizedAccount");
-    });
-  });
 
-  /*
-   * IRECMarketplace Contract Tests
-   */
-  describe("IRECMarketplace", function () {
-    // Helper function to setup tokens for marketplace testing
-    async function setupMarketplaceTokens() {
-      const fixture = await loadFixture(deployContractsFixture);
-      const { tokenContract, marketplace, owner } = fixture;
+    it("Should mint an NFT and return the token ID", async function () {
+      const tx = await nft.safeMint(ownerAddress);
+      const receipt = await tx.wait();
       
-      // Approve marketplace to spend tokens
-      await tokenContract.connect(owner).approve(
-        await marketplace.getAddress(),
-        ethers.parseEther("1000")
+      // Get events from transaction receipt
+      const events = receipt.logs.map(log => nft.interface.parseLog(log));
+      const transferEvent = events.find(event => event?.name === 'Transfer');
+      
+      expect(transferEvent).to.not.be.undefined;
+      const tokenId = transferEvent?.args?.tokenId;
+      
+      expect(await nft.ownerOf(tokenId)).to.equal(ownerAddress);
+      expect(await nft.tokenURI(tokenId)).to.equal(BASE_URI);
+    });
+
+    it("Should increment token ID counter correctly", async function () {
+      expect(await nft.getTokenIdCount()).to.equal(0);
+      
+      await nft.safeMint(ownerAddress);
+      expect(await nft.getTokenIdCount()).to.equal(1);
+      
+      await nft.safeMint(addr1Address);
+      expect(await nft.getTokenIdCount()).to.equal(2);
+    });
+
+    it("Should prevent multiple minting from the same address", async function () {
+      await nft.connect(addr1).safeMint(addr1Address);
+      await expect(nft.connect(addr1).safeMint(addr1Address)).to.be.revertedWith("You Have Already minted!");
+    });
+
+    it("Should allow owner to set a new base URI", async function () {
+      const NEW_BASE_URI = "https://irec.org/metadata/";
+      await nft.setBaseURI(NEW_BASE_URI);
+      
+      const tokenId = await nft.safeMint(ownerAddress);
+      expect(await nft.tokenURI(0)).to.equal(NEW_BASE_URI);
+    });
+
+    it("Should not allow non-owners to mint", async function () {
+      await expect(nft.connect(addr1).safeMint(addr1Address)).to.be.revertedWithCustomError(
+        nft,
+        "OwnableUnauthorizedAccount"
       );
-      
-      // Deposit reserve tokens to marketplace
-      await marketplace.connect(owner).depositReserveTokens();
-      
-      return fixture;
-    }
-    
-    it("Should deploy with correct token contract", async function () {
-      const { marketplace, tokenContract } = await loadFixture(deployContractsFixture);
-      
-      expect(await marketplace.fractionToken()).to.equal(await tokenContract.getAddress());
     });
+  });
+
+  describe("IRECCertTokens Contract", function () {
+    let nftTokenId: number;
     
-    it("Should configure sale price correctly", async function () {
-      const { marketplace, pricePerToken } = await loadFixture(deployContractsFixture);
+    beforeEach(async function () {
+      // Mint an NFT to owner
+      const tx = await nft.safeMint(ownerAddress);
+      const receipt = await tx.wait();
       
-      expect(await marketplace.salePrice()).to.equal(pricePerToken);
-    });
-    
-    it("Should deposit reserve tokens correctly", async function () {
-      const { marketplace, tokenContract, totalSupply } = await setupMarketplaceTokens();
+      // Extract token ID from events
+      const events = receipt.logs.map(log => nft.interface.parseLog(log));
+      const transferEvent = events.find(event => event?.name === 'Transfer');
+      nftTokenId = Number(transferEvent?.args?.tokenId);
       
-      // Check if tokens were transferred to marketplace
-      const marketplaceBalance = await tokenContract.balanceOf(await marketplace.getAddress());
-      expect(marketplaceBalance).to.equal(totalSupply);
+      // Approve token contract to transfer NFT
+      await nft.approve(await token.getAddress(), nftTokenId);
     });
+
+    it("Should deploy with correct parameters", async function () {
+      expect(await token.name()).to.equal(TOKEN_NAME);
+      expect(await token.symbol()).to.equal(TOKEN_SYMBOL);
+      expect(await token.nftContract()).to.equal(await nft.getAddress());
+      expect(await token.iTotalSupply()).to.equal(TOTAL_SUPPLY);
+    });
+
+    it("Should mint tokens from NFT ownership transfer", async function () {
+      await token.tranferNFTOwnership(nftTokenId);
+      
+      expect(await token.balanceOf(ownerAddress)).to.equal(TOTAL_SUPPLY);
+      expect(await token.hasMinted(nftTokenId)).to.be.true;
+    });
+
+    it("Should prevent re-minting tokens from the same NFT", async function () {
+      await token.tranferNFTOwnership(nftTokenId);
+      await expect(token.tranferNFTOwnership(nftTokenId)).to.be.revertedWith("NFT Token ID Already Minted!");
+    });
+
+    it("Should transfer NFT to token contract during minting", async function () {
+      await token.tranferNFTOwnership(nftTokenId);
+      expect(await nft.ownerOf(nftTokenId)).to.equal(await token.getAddress());
+    });
+
+    it("Should not allow non-owners to mint tokens", async function () {
+      await expect(token.connect(addr1).tranferNFTOwnership(nftTokenId)).to.be.revertedWithCustomError(
+        token,
+        "OwnableUnauthorizedAccount"
+      );
+    });
+  });
+
+  describe("IRECMarketplace Contract", function () {
+    let nftTokenId: number;
     
+    beforeEach(async function () {
+      // Setup: Mint NFT and ERC20 tokens
+      const tx = await nft.safeMint(ownerAddress);
+      const receipt = await tx.wait();
+      
+      // Extract token ID
+      const events = receipt.logs.map(log => nft.interface.parseLog(log));
+      const transferEvent = events.find(event => event?.name === 'Transfer');
+      nftTokenId = Number(transferEvent?.args?.tokenId);
+      
+      // Approve and mint tokens
+      await nft.approve(await token.getAddress(), nftTokenId);
+      await token.tranferNFTOwnership(nftTokenId);
+      
+      // Configure marketplace sale
+      await marketplace.configureSale(PRICE_PER_TOKEN);
+      
+      // Approve tokens for marketplace
+      await token.approve(await marketplace.getAddress(), TOTAL_SUPPLY);
+    });
+
+    it("Should deploy with correct token address", async function () {
+      expect(await marketplace.fractionToken()).to.equal(await token.getAddress());
+      expect(await marketplace.salePrice()).to.equal(PRICE_PER_TOKEN);
+      expect(await marketplace.saleActive()).to.be.true;
+    });
+
+    it("Should allow owner to deposit reserve tokens", async function () {
+      await marketplace.depositReserveTokens();
+      expect(await token.balanceOf(await marketplace.getAddress())).to.equal(TOTAL_SUPPLY);
+    });
+
+    it("Should calculate ownership percentage correctly", async function () {
+      // Owner has all tokens initially
+      expect(await marketplace.getOwnershipPercentage(ownerAddress)).to.equal(10000); // 100.00%
+      
+      // Transfer half to addr1
+      await token.transfer(addr1Address, TOTAL_SUPPLY / 2n);
+      
+      expect(await marketplace.getOwnershipPercentage(ownerAddress)).to.equal(5000); // 50.00%
+      expect(await marketplace.getOwnershipPercentage(addr1Address)).to.equal(5000); // 50.00%
+    });
+
     it("Should allow users to purchase tokens from reserve", async function () {
-      const { marketplace, tokenContract, buyer1, pricePerToken } = await setupMarketplaceTokens();
+      // First deposit tokens to marketplace
+      await marketplace.depositReserveTokens();
       
-      const tokenAmount = 5;
-      const ethToSend = pricePerToken * BigInt(tokenAmount);
-      
-      // Initial balance
-      const initialBalance = await tokenContract.balanceOf(buyer1.address);
+      const amount = 10;
+      const cost = BigInt(amount) * PRICE_PER_TOKEN;
       
       // Purchase tokens
-      await marketplace.connect(buyer1).purchaseFromReserve(tokenAmount, { value: ethToSend });
+      await marketplace.connect(addr1).purchaseFromReserve(amount, { value: cost });
       
-      // Check if tokens were transferred
-      const finalBalance = await tokenContract.balanceOf(buyer1.address);
-      expect(finalBalance - initialBalance).to.equal(ethToSend / pricePerToken);
+      expect(await token.balanceOf(addr1Address)).to.equal(BigInt(amount) * PRICE_PER_TOKEN / PRICE_PER_TOKEN);
       
-      // Check ownership tracking
-      const transfers = await marketplace.getOwnershipTransfers();
-      expect(transfers.length).to.be.at.least(1);
-      
-      const lastTransfer = transfers[transfers.length - 1];
-      expect(lastTransfer.from).to.equal(await marketplace.getAddress());
-      expect(lastTransfer.to).to.equal(buyer1.address);
-      expect(lastTransfer.amount).to.equal(tokenAmount);
+      // Check ownership records
+      const ownerships = await marketplace.getOwnershipTransfers();
+      expect(ownerships.length).to.equal(1);
+      expect(ownerships[0].from).to.equal(await marketplace.getAddress());
+      expect(ownerships[0].to).to.equal(addr1Address);
+      expect(ownerships[0].amount).to.equal(amount);
     });
-    
-    it("Should fail purchase if not enough ETH sent", async function () {
-      const { marketplace, buyer1, pricePerToken } = await setupMarketplaceTokens();
-      
-      const tokenAmount = 5;
-      const insufficientEth = pricePerToken * BigInt(tokenAmount) - BigInt(1);
-      
-      await expect(
-        marketplace.connect(buyer1).purchaseFromReserve(tokenAmount, { value: insufficientEth })
-      ).to.be.revertedWith("Must send ETH");
-    });
-    
+
     it("Should allow users to list tokens for sale", async function () {
-      const { marketplace, tokenContract, owner, buyer1, pricePerToken } = await setupMarketplaceTokens();
+      const listAmount = 100;
+      const listPrice = ethers.parseEther("0.02");
       
-      // First, transfer some tokens to buyer1 so they can list them
-      const tokenAmount = 10;
-      const ethToSend = pricePerToken * BigInt(tokenAmount);
-      await marketplace.connect(buyer1).purchaseFromReserve(tokenAmount, { value: ethToSend });
+      // Approve and list tokens
+      await token.approve(await marketplace.getAddress(), listAmount);
+      await marketplace.listToken(listAmount, listPrice);
       
-      // Now buyer1 lists tokens for sale
-      const listPrice = ethers.parseEther("0.015"); // Higher than original price
-      await tokenContract.connect(buyer1).approve(await marketplace.getAddress(), tokenAmount);
-      await marketplace.connect(buyer1).listToken(tokenAmount, listPrice);
+      // Check listing
+      expect(await marketplace.listingCount()).to.equal(1);
       
-      // Check listing was created
-      const listingCount = await marketplace.listingCount();
-      expect(listingCount).to.equal(1);
-      
-      const listing = await marketplace.getTokenListing(listingCount);
-      expect(listing.seller).to.equal(buyer1.address);
-      expect(listing.amount).to.equal(tokenAmount);
+      const listing = await marketplace.getTokenListing(1);
+      expect(listing.seller).to.equal(ownerAddress);
+      expect(listing.amount).to.equal(listAmount);
       expect(listing.pricePerToken).to.equal(listPrice);
       expect(listing.active).to.be.true;
     });
-    
+
     it("Should allow users to purchase from listings", async function () {
-      const { marketplace, tokenContract, owner, buyer1, buyer2 } = await setupMarketplaceTokens();
+      const listAmount = 100;
+      const listPrice = ethers.parseEther("0.02");
       
-      // First, transfer some tokens to buyer1 so they can list them
-      const tokenAmount = 10;
-      const purchasePrice = ethers.parseEther("0.01") * BigInt(tokenAmount);
-      await marketplace.connect(buyer1).purchaseFromReserve(tokenAmount, { value: purchasePrice });
+      // List tokens
+      await token.approve(await marketplace.getAddress(), listAmount);
+      await marketplace.listToken(listAmount, listPrice);
       
-      // Now buyer1 lists tokens for sale
-      const listPrice = ethers.parseEther("0.015"); // Higher than original price
-      const totalListingPrice = listPrice * BigInt(tokenAmount);
-      await tokenContract.connect(buyer1).approve(await marketplace.getAddress(), tokenAmount);
-      await marketplace.connect(buyer1).listToken(tokenAmount, listPrice);
+      // Purchase tokens
+      const cost = BigInt(listAmount) * listPrice;
+      await marketplace.connect(addr1).purchaseFromListing(1, { value: cost });
       
-      const listingId = await marketplace.listingCount();
+      // Verify token transfer
+      expect(await token.balanceOf(addr1Address)).to.equal(listAmount);
       
-      // Initial balances
-      const initialSellerBalance = await ethers.provider.getBalance(buyer1.address);
-      const initialBuyerTokenBalance = await tokenContract.balanceOf(buyer2.address);
-      
-      // Buyer2 purchases from the listing
-      await marketplace.connect(buyer2).purchaseFromListing(listingId, { value: totalListingPrice });
-      
-      // Check tokens were transferred to buyer2
-      const finalBuyerTokenBalance = await tokenContract.balanceOf(buyer2.address);
-      expect(finalBuyerTokenBalance - initialBuyerTokenBalance).to.equal(tokenAmount);
-      
-      // Check ETH was transferred to seller
-      const finalSellerBalance = await ethers.provider.getBalance(buyer1.address);
-      expect(finalSellerBalance > initialSellerBalance).to.be.true;
-      
-      // Check listing is no longer active
-      const listing = await marketplace.getTokenListing(listingId);
+      // Verify listing is no longer active
+      const listing = await marketplace.getTokenListing(1);
       expect(listing.active).to.be.false;
       
-      // Check ownership tracking
-      const transfers = await marketplace.getOwnershipTransfers();
-      const lastTransfer = transfers[transfers.length - 1];
-      expect(lastTransfer.from).to.equal(buyer1.address);
-      expect(lastTransfer.to).to.equal(buyer2.address);
+      // Check ownership records
+      const ownerships = await marketplace.getOwnershipTransfers();
+      expect(ownerships.length).to.equal(1);
+      expect(ownerships[0].from).to.equal(ownerAddress);
+      expect(ownerships[0].to).to.equal(addr1Address);
+      expect(ownerships[0].amount).to.equal(listAmount);
+    });
+
+    it("Should fail to purchase if not enough ETH is sent", async function () {
+      const listAmount = 100;
+      const listPrice = ethers.parseEther("0.02");
+      
+      // List tokens
+      await token.approve(await marketplace.getAddress(), listAmount);
+      await marketplace.listToken(listAmount, listPrice);
+      
+      // Try to purchase with insufficient funds
+      const insufficientCost = BigInt(listAmount) * listPrice - 1n;
+      await expect(
+        marketplace.connect(addr1).purchaseFromListing(1, { value: insufficientCost })
+      ).to.be.revertedWith("Insufficient ETH sent");
     });
     
-    it("Should calculate ownership percentage correctly", async function () {
-      const { marketplace, tokenContract, buyer1, owner, totalSupply } = await setupMarketplaceTokens();
+    it("Should fail to list tokens if user doesn't have enough", async function () {
+      // Transfer all tokens to addr1
+      await token.transfer(addr1Address, TOTAL_SUPPLY);
       
-      // Purchase 10% of tokens
-      const tokenAmount = Number(totalSupply) / 10;
-      const ethToSend = ethers.parseEther("0.01") * BigInt(tokenAmount);
-      
-      await marketplace.connect(buyer1).purchaseFromReserve(tokenAmount, { value: ethToSend });
-      
-      // Check ownership percentage (multiplied by 10000 in the contract)
-      const percentage = await marketplace.getOwnershipPercentage(buyer1.address);
-      expect(percentage).to.be.closeTo(1000n, 5n); // Should be around 10% (1000 basis points) with small rounding tolerance
+      // Try to list tokens 
+      await expect(
+        marketplace.listToken(100, ethers.parseEther("0.02"))
+      ).to.be.revertedWith("Insufficient Tokens To List!");
     });
   });
 });
