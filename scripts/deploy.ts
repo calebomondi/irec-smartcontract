@@ -11,7 +11,7 @@ async function main() {
   // Display account balance
   const balance = await deployer.provider.getBalance(deployer.address);
   console.log(`Account balance: ${ethers.formatEther(balance)} ETH`);
-
+    /*
   // 1. Deploy the NFT contract first
   console.log("\n1. Deploying IRECCertNFT contract...");
   const IRECCertNFT = await ethers.getContractFactory("IRECCertNFT");
@@ -25,15 +25,8 @@ async function main() {
   const nftAddress = await nftContract.getAddress();
   console.log(`IRECCertNFT deployed to: ${nftAddress}`);
   
-  // Mint an NFT to the deployer
-  console.log("Minting the first NFT certificate...");
-  const mintTx = await nftContract.safeMint(deployer.address);
-  await mintTx.wait();
-  console.log("NFT minted successfully!");
-  
-  // Get the token ID of the minted NFT (it should be 0 for the first NFT)
+  // Get the token ID of the minted NFT (it is 0 for the first NFT)
   const tokenId = 0;
-  console.log(`Minted NFT with token ID: ${tokenId}`);
   
   // 2. Deploy the Token contract that links to the NFT
   console.log("\n2. Deploying IRECCertTokens contract...");
@@ -44,44 +37,24 @@ async function main() {
     totalSupply,         // total supply
     "IREC Tokens",       // name
     "IRET",              // symbol
-    nftAddress,          // NFT contract address
+    "0x8539DA660BFEd7c0F49728CDA6726BeB1ecf2cBA",          // NFT contract address
     tokenId              // NFT token ID
   );
   await tokenContract.deploymentTransaction()?.wait();
   
   const tokenAddress = await tokenContract.getAddress();
   console.log(`IRECCertTokens deployed to: ${tokenAddress}`);
-  
+  */
   // 3. Deploy the Marketplace contract that uses the tokens
   console.log("\n3. Deploying IRECMarketplace contract...");
   const IRECMarketplace = await ethers.getContractFactory("IRECMarketplace");
-  const marketplace = await IRECMarketplace.deploy(tokenAddress);
+  const marketplace = await IRECMarketplace.deploy("0x953894c851453758b3Ec420f75e96217241DC038");
   await marketplace.deploymentTransaction()?.wait();
   
   const marketplaceAddress = await marketplace.getAddress();
   console.log(`IRECMarketplace deployed to: ${marketplaceAddress}`);
-  
-  // 4. Setup the marketplace
-  console.log("\n4. Setting up the marketplace...");
-  
-  // Set sale price per token (in wei)
-  const pricePerToken = ethers.parseEther("0.01");
-  console.log(`Configuring sale price: ${ethers.formatEther(pricePerToken)} ETH per token`);
-  
-  const configureTx = await marketplace.configureSale(pricePerToken);
-  await configureTx.wait();
-  console.log("Sale price configured successfully!");
 
-  
-  // Log deployment summary
-  console.log("\n===============================");
-  console.log("DEPLOYMENT SUMMARY");
-  console.log("===============================");
-  console.log(`IRECCertNFT: ${nftAddress}`);
-  console.log(`IRECCertTokens: ${tokenAddress}`);
-  console.log(`IRECMarketplace: ${marketplaceAddress}`);
-  console.log("===============================");
-  
+  /*
   // Verify contracts on Etherscan
   const network = await ethers.provider.getNetwork();
   if (network.name !== "localhost" && network.name !== "hardhat") {
@@ -96,7 +69,7 @@ async function main() {
     
     // Verify NFT contract
     await hre.run("verify:verify", {
-      address: nftAddress,
+      address: "0x8539DA660BFEd7c0F49728CDA6726BeB1ecf2cBA",
       constructorArguments: [
         "IREC Certificate",
         "IREC",
@@ -111,27 +84,24 @@ async function main() {
         totalSupply,
         "IREC Tokens",
         "IRET",
-        nftAddress,
+        "0x8539DA660BFEd7c0F49728CDA6726BeB1ecf2cBA",
         tokenId
       ],
     });
-    
+    /*
     // Verify Marketplace contract
     await hre.run("verify:verify", {
       address: marketplaceAddress,
       constructorArguments: [tokenAddress],
     });
-    
+    */
     console.log("Contract verification complete!");
-  }
-  
-  console.log("\nDeployment complete!");
 }
 
 // Execute the deployment
 main()
-  .then(() => process.exit(0))
-  .catch((error: any) => {
-    console.error(error);
-    process.exit(1);
-  });
+.then(() => process.exit(0))
+.catch((error: any) => {
+  console.error(error);
+  process.exit(1);
+});
